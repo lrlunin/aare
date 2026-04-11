@@ -18,12 +18,14 @@ FetchContent_MakeAvailable(benchmark)
 add_executable(benchmarks)
 
 target_sources(
-  benchmarks PRIVATE ndarray_benchmark.cpp calculateeta_benchmark.cpp
-                     reduce_benchmark.cpp)
+  benchmarks
+  PRIVATE ndarray_benchmark.cpp calculateeta_benchmark.cpp reduce_benchmark.cpp
+          clusterfinder_benchmark.cpp fit_benchmark.cpp)
 
 # Link Google Benchmark and other necessary libraries
-target_link_libraries(benchmarks PRIVATE benchmark::benchmark aare_core
-                                         aare_compiler_flags)
+target_link_libraries(
+  benchmarks PRIVATE benchmark::benchmark benchmark::benchmark_main aare_core
+                     aare_compiler_flags)
 
 # Set output properties
 set_target_properties(
@@ -31,8 +33,9 @@ set_target_properties(
                         OUTPUT_NAME run_benchmarks)
 
 add_executable(fit_benchmark fit_benchmark.cpp)
-target_link_libraries(fit_benchmark PRIVATE benchmark::benchmark aare_core
-                                            aare_compiler_flags)
+target_link_libraries(
+  fit_benchmark PRIVATE benchmark::benchmark benchmark::benchmark_main
+                        aare_core aare_compiler_flags)
 target_include_directories(
   fit_benchmark SYSTEM
   PRIVATE $<TARGET_PROPERTY:Minuit2::Minuit2,INTERFACE_INCLUDE_DIRECTORIES>)

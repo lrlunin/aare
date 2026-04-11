@@ -26,11 +26,14 @@ class ClusterFinder {
     PEDESTAL_TYPE m_nSigma;
     const PEDESTAL_TYPE c2;
     const PEDESTAL_TYPE c3;
+
     Pedestal<PEDESTAL_TYPE> m_pedestal;
     ClusterVector<ClusterType> m_clusters;
 
-    static const uint8_t ClusterSizeX = ClusterType::cluster_size_x;
-    static const uint8_t ClusterSizeY = ClusterType::cluster_size_y;
+    static constexpr uint8_t ClusterSizeX = ClusterType::cluster_size_x;
+    static constexpr uint8_t ClusterSizeY = ClusterType::cluster_size_y;
+    static constexpr int dx = ClusterSizeX / 2;
+    static constexpr int dy = ClusterSizeY / 2;
     using CT = typename ClusterType::value_type;
 
   public:
@@ -81,7 +84,8 @@ class ClusterFinder {
             m_clusters = ClusterVector<ClusterType>{};
         return tmp;
     }
-    void find_clusters(NDView<FRAME_TYPE, 2> frame, uint64_t frame_number = 0) {
+    void find_clusters_old(NDView<FRAME_TYPE, 2> frame,
+                           uint64_t frame_number = 0) {
         // // TODO! deal with even size clusters
         // // currently 3,3 -> +/- 1
         // //  4,4 -> +/- 2
@@ -180,6 +184,75 @@ class ClusterFinder {
 
                     // Add the cluster to the output ClusterVector
                     m_clusters.push_back(cluster);
+                }
+            }
+        }
+    }
+    void find_clusters(NDView<FRAME_TYPE, 2> frame, uint64_t frame_number = 0,
+                       bool update_pedestal = true) {
+        m_clusters.set_frame_number(frame_number);
+        for (int iy = dy; iy < frame.shape(0) - dy; iy++) {
+            for (int ix = dx; ix < frame.shape(1) - dx; ix++) {
+                PEDESTAL_TYPE rms = m_pedestal.std(iy, ix);
+                PEDESTAL_TYPE value = (frame(iy, ix) - m_pedestal.mean(iy, ix));
+
+                // negative value below pedestal threshold => skip
+                if (value < -m_nSigma * rms)
+                    continue;
+
+                std::array<PEDESTAL_TYPE, ClusterSizeX * ClusterSizeY>
+                    cluster_values;
+                PEDESTAL_TYPE total = 0;
+                PEDESTAL_TYPE max = std::numeric_limits<FRAME_TYPE>::min();
+
+                for (int ir = -dy; ir < dy + 1; ir++) {
+                    for (int ic = -dx; ic < dx + 1; ic++) {
+                        PEDESTAL_TYPE val = frame(iy + ir, ix + ic) -
+                                            m_pedestal.mean(iy + ir, ix + ic);
+                        cluster_values[(ir + dy) * ClusterSizeX + (ic + dx)] =
+                            val;
+                        total += val;
+                        max = std::max(max, val);
+                    }
+                }
+
+                if (max > m_nSigma * rms || total > c3 * m_nSigma * rms) {
+                    if (value == max) {
+                        ClusterType cluster{};
+                        cluster.x = ix;
+                        cluster.y = iy;
+                        for (size_t i = 0; i < ClusterSizeX * ClusterSizeY;
+                             i++) {
+                            // If the cluster type is an integral type, and the
+                            // pedestal is a floating point type then we need to
+                            // round the value before storing it
+                            if constexpr (std::is_integral_v<CT> &&
+                                          std::is_floating_point_v<
+                                              PEDESTAL_TYPE>) {
+                                auto tmp = std::lround(cluster_values[i]);
+                                cluster.data[i] = static_cast<CT>(tmp);
+                            }
+                            // On the other hand if both are floating point or
+                            // both are integral then we can just static cast
+                            // directly
+                            else {
+                                auto tmp = cluster_values[i];
+                                cluster.data[i] = static_cast<CT>(tmp);
+                            }
+                        }
+                        // Add the cluster to the output ClusterVector
+                        m_clusters.push_back(cluster);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    if (update_pedestal) {
+                        m_pedestal.push_fast(
+                            iy, ix,
+                            frame(
+                                iy,
+                                ix)); // Assume we have reached n_samples in the
+                    }
                 }
             }
         }
