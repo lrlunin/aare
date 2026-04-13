@@ -18,19 +18,24 @@ FetchContent_MakeAvailable(benchmark)
 add_executable(benchmarks)
 
 target_sources(
-  benchmarks
-  PRIVATE ndarray_benchmark.cpp calculateeta_benchmark.cpp reduce_benchmark.cpp
-          clusterfinder_benchmark.cpp fit_benchmark.cpp)
-
+  benchmarks PRIVATE ndarray_benchmark.cpp calculateeta_benchmark.cpp
+                     reduce_benchmark.cpp)
 # Link Google Benchmark and other necessary libraries
 target_link_libraries(
   benchmarks PRIVATE benchmark::benchmark benchmark::benchmark_main aare_core
                      aare_compiler_flags)
-
 # Set output properties
 set_target_properties(
   benchmarks PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
                         OUTPUT_NAME run_benchmarks)
+
+add_executable(clusterfinder_benchmark clusterfinder_benchmark.cpp)
+target_link_libraries(
+  clusterfinder_benchmark
+  PRIVATE benchmark::benchmark benchmark::benchmark_main aare_core
+          aare_compiler_flags)
+set_target_properties(clusterfinder_benchmark
+                      PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 add_executable(fit_benchmark fit_benchmark.cpp)
 target_link_libraries(

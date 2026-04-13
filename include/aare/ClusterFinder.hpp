@@ -32,8 +32,8 @@ class ClusterFinder {
 
     static constexpr uint8_t ClusterSizeX = ClusterType::cluster_size_x;
     static constexpr uint8_t ClusterSizeY = ClusterType::cluster_size_y;
-    static constexpr int dx = ClusterSizeX / 2;
-    static constexpr int dy = ClusterSizeY / 2;
+    static constexpr int dx_c = ClusterSizeX / 2;
+    static constexpr int dy_c = ClusterSizeY / 2;
     using CT = typename ClusterType::value_type;
 
   public:
@@ -191,8 +191,8 @@ class ClusterFinder {
     void find_clusters(NDView<FRAME_TYPE, 2> frame, uint64_t frame_number = 0,
                        bool update_pedestal = true) {
         m_clusters.set_frame_number(frame_number);
-        for (int iy = dy; iy < frame.shape(0) - dy; iy++) {
-            for (int ix = dx; ix < frame.shape(1) - dx; ix++) {
+        for (int iy = dy_c; iy < frame.shape(0) - dy_c; iy++) {
+            for (int ix = dx_c; ix < frame.shape(1) - dx_c; ix++) {
                 PEDESTAL_TYPE rms = m_pedestal.std(iy, ix);
                 PEDESTAL_TYPE value = (frame(iy, ix) - m_pedestal.mean(iy, ix));
 
@@ -205,12 +205,12 @@ class ClusterFinder {
                 PEDESTAL_TYPE total = 0;
                 PEDESTAL_TYPE max = std::numeric_limits<FRAME_TYPE>::min();
 
-                for (int ir = -dy; ir < dy + 1; ir++) {
-                    for (int ic = -dx; ic < dx + 1; ic++) {
+                for (int ir = -dy_c; ir < dy_c + 1; ir++) {
+                    for (int ic = -dx_c; ic < dx_c + 1; ic++) {
                         PEDESTAL_TYPE val = frame(iy + ir, ix + ic) -
                                             m_pedestal.mean(iy + ir, ix + ic);
-                        cluster_values[(ir + dy) * ClusterSizeX + (ic + dx)] =
-                            val;
+                        cluster_values[(ir + dy_c) * ClusterSizeX +
+                                       (ic + dx_c)] = val;
                         total += val;
                         max = std::max(max, val);
                     }
