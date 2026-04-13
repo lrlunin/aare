@@ -18,7 +18,7 @@ constexpr aare::Shape<2> kImageShape{400, 400};
 constexpr std::size_t kPedestalSamples = 1500;
 constexpr std::size_t kTestFrames = 5000;
 
-using ClusterType = aare::Cluster<int32_t, 3, 3>;
+using ClusterType = aare::Cluster<int32_t, 7, 7>;
 using Finder = aare::ClusterFinder<ClusterType, uint16_t, double>;
 
 class BenchmarkData {
@@ -78,8 +78,39 @@ void run_benchmark(benchmark::State &state, const char *label,
         for (aare::Frame &frame : data.v_test_frames) {
             // Resolves at compile-time for zero overhead
             if constexpr (UseNewMethod) {
-                finder.find_clusters(frame.view<uint16_t>(), 0,
-                                     update_pedestal);
+                finder.find_clusters_fast(frame.view<uint16_t>(), 0,
+                                          update_pedestal);
+            } else {
+                finder.find_clusters_old(frame.view<uint16_t>(), 0);
+            }
+            cluster_count += finder.steal_clusters(true).size();
+        }
+
+        benchmark::DoNotOptimize(cluster_count);
+    }
+
+    auto n_test_frames = data.n_test_frames;
+    state.counters["test_frames"] = n_test_frames;
+    state.counters["clusters_per_frame"] =
+        static_cast<double>(cluster_count) / static_cast<double>(n_test_frames);
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) *
+                            static_cast<int64_t>(n_test_frames));
+    state.SetLabel(label);
+}
+
+template <typename FinderType, bool copy>
+void run_benchmark_old(benchmark::State &state, const char *label,
+                       bool update_pedestal) {
+    FinderType finder(kImageShape);
+    BenchmarkData data{};
+    data.initalize_finder(finder);
+    std::size_t cluster_count = 0;
+    for (auto _ : state) {
+        cluster_count = 0;
+        for (aare::Frame &frame : data.v_test_frames) {
+            // Resolves at compile-time for zero overhead
+            if constexpr (copy) {
+                finder.find_clusters_semi(frame.view<uint16_t>(), 0);
             } else {
                 finder.find_clusters_old(frame.view<uint16_t>(), 0);
             }
@@ -100,7 +131,11 @@ void run_benchmark(benchmark::State &state, const char *label,
 
 // Wrapper for the old function
 void BM_ClusterFinder_Old(benchmark::State &state) {
-    run_benchmark<Finder, false>(state, "find_clusters_old", true);
+    run_benchmark_old<Finder, false>(state, "find_clusters_old", true);
+}
+
+void BM_ClusterFinder_Old_Copy(benchmark::State &state) {
+    run_benchmark_old<Finder, true>(state, "find_clusters_old_copy", true);
 }
 
 // Wrapper for the new function
@@ -115,5 +150,6 @@ void BM_ClusterFinder_New_SkipPedestals(benchmark::State &state) {
 
 // Register both benchmarks
 BENCHMARK(BM_ClusterFinder_Old)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_ClusterFinder_Old_Copy)->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_ClusterFinder_New)->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_ClusterFinder_New_SkipPedestals)->Unit(benchmark::kMillisecond);

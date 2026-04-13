@@ -34,6 +34,8 @@ class ClusterFinder {
     static constexpr uint8_t ClusterSizeY = ClusterType::cluster_size_y;
     static constexpr int dx_c = ClusterSizeX / 2;
     static constexpr int dy_c = ClusterSizeY / 2;
+    static constexpr int shape_x = 400;
+    static constexpr int shape_y = 400;
     using CT = typename ClusterType::value_type;
 
   public:
@@ -98,8 +100,8 @@ class ClusterFinder {
         int has_center_pixel_y = ClusterSizeY % 2;
 
         m_clusters.set_frame_number(frame_number);
-        for (int iy = 0; iy < frame.shape(0); iy++) {
-            for (int ix = 0; ix < frame.shape(1); ix++) {
+        for (int iy = 0; iy < shape_y; iy++) {
+            for (int ix = 0; ix < shape_x; ix++) {
 
                 PEDESTAL_TYPE max = std::numeric_limits<FRAME_TYPE>::min();
                 PEDESTAL_TYPE total = 0;
@@ -154,8 +156,8 @@ class ClusterFinder {
                     int i = 0;
                     for (int ir = -dy; ir < dy + has_center_pixel_y; ir++) {
                         for (int ic = -dx; ic < dx + has_center_pixel_x; ic++) {
-                            if (ix + ic >= 0 && ix + ic < frame.shape(1) &&
-                                iy + ir >= 0 && iy + ir < frame.shape(0)) {
+                            if (ix + ic >= 0 && ix + ic < shape_y &&
+                                iy + ir >= 0 && iy + ir < shape_x) {
 
                                 // If the cluster type is an integral type, and
                                 // the pedestal is a floating point type then we
@@ -188,8 +190,83 @@ class ClusterFinder {
             }
         }
     }
-    void find_clusters(NDView<FRAME_TYPE, 2> frame, uint64_t frame_number = 0,
-                       bool update_pedestal = true) {
+    void find_clusters_semi(NDView<FRAME_TYPE, 2> frame,
+                            uint64_t frame_number = 0) {
+        m_clusters.set_frame_number(frame_number);
+        for (int iy = 0; iy < shape_y; iy++) {
+            for (int ix = 0; ix < shape_x; ix++) {
+                PEDESTAL_TYPE max = std::numeric_limits<FRAME_TYPE>::min();
+                PEDESTAL_TYPE total = 0;
+
+                // What can we short circuit here?
+                PEDESTAL_TYPE rms = m_pedestal.std(iy, ix);
+                PEDESTAL_TYPE value = (frame(iy, ix) - m_pedestal.mean(iy, ix));
+
+                if (value < -m_nSigma * rms)
+                    continue; // NEGATIVE_PEDESTAL go to next pixel
+                              // TODO! No pedestal update???
+
+                for (int sub_y = std::max(iy - dy_c, 0);
+                     sub_y < std::min(iy + dy_c + 1, shape_y); sub_y++) {
+                    for (int sub_x = std::max(ix - dx_c, 0);
+                         sub_x < std::min(ix + dx_c + 1, shape_x); sub_x++) {
+                        PEDESTAL_TYPE val =
+                            frame(sub_y, sub_x) - m_pedestal.mean(sub_y, sub_x);
+                        total += val;
+                        max = std::max(max, val);
+                    }
+                }
+
+                if (max > m_nSigma * rms || total > c3 * m_nSigma * rms) {
+                    if (value == max) {
+                        ClusterType cluster{};
+                        cluster.x = ix;
+                        cluster.y = iy;
+                        int i = 0;
+                        for (int sub_y = std::max(iy - dy_c, 0);
+                             sub_y < std::min(iy + dy_c + 1, shape_y);
+                             sub_y++) {
+                            for (int sub_x = std::max(ix - dx_c, 0);
+                                 sub_x < std::min(ix + dx_c + 1, shape_x);
+                                 sub_x++) {
+                                // If the cluster type is an integral type, and
+                                // the pedestal is a floating point type then we
+                                // need to round the value before storing it
+                                if constexpr (std::is_integral_v<CT> &&
+                                              std::is_floating_point_v<
+                                                  PEDESTAL_TYPE>) {
+                                    auto tmp = std::lround(
+                                        frame(sub_y, sub_x) -
+                                        m_pedestal.mean(sub_y, sub_x));
+                                    cluster.data[i++] = static_cast<CT>(tmp);
+                                }
+                                // On the other hand if both are floating point
+                                // or both are integral then we can just static
+                                // cast directly
+                                else {
+                                    auto tmp = frame(sub_y, sub_x) -
+                                               m_pedestal.mean(sub_y, sub_x);
+                                    cluster.data[i++] = static_cast<CT>(tmp);
+                                }
+                            }
+                        }
+                        m_clusters.push_back(cluster);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    m_pedestal.push_fast(
+                        iy, ix,
+                        frame(iy,
+                              ix)); // Assume we have reached n_samples in the
+                }
+            }
+        }
+    }
+
+    void find_clusters_fast(NDView<FRAME_TYPE, 2> frame,
+                            uint64_t frame_number = 0,
+                            bool update_pedestal = true) {
         m_clusters.set_frame_number(frame_number);
         for (int iy = dy_c; iy < frame.shape(0) - dy_c; iy++) {
             for (int ix = dx_c; ix < frame.shape(1) - dx_c; ix++) {
