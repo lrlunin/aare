@@ -182,8 +182,14 @@ class ClusterFile {
         if (!m_stream.is_open()) {
             throw std::runtime_error(LOCATION + "File not opened");
         }
-        std::streampos pos =
-            (m_mode == "r") ? m_stream.tellg() : m_stream.tellp();
+        std::streampos pos{};
+        if (m_mode == "r") {
+            pos = m_stream.tellg();
+        } else if (m_mode == "w" || m_mode == "a") {
+            pos = m_stream.tellp();
+        } else {
+            throw std::runtime_error(LOCATION + "Unsupported mode: " + m_mode);
+        }
         if (pos == std::streampos(-1)) {
             throw std::runtime_error(LOCATION + "Could not determine position");
         }
@@ -300,7 +306,7 @@ bool ClusterFile<ClusterType, Enable>::read_value_optional(T &value,
         return true;
     }
     if (m_stream.eof()) {
-        if (m_stream.gcount() == 0) {
+        if (m_stream.gcount() == std::streamsize{0}) {
             return false;
         }
         throw std::runtime_error(LOCATION +
