@@ -272,8 +272,9 @@ size_t ClusterFile<ClusterType, Enable>::read_items_partial(
         return count;
     }
     if (bytes_read % item_size != 0) {
-        throw std::runtime_error(LOCATION + "Partial " + std::string(context) +
-                                 " read");
+        throw std::runtime_error(
+            LOCATION + "Incomplete item read for " + std::string(context) +
+            " - file may be corrupted or format mismatch detected");
     }
     if (!m_stream.eof() && !m_stream) {
         throw std::runtime_error(LOCATION + "Error reading " +
@@ -345,7 +346,8 @@ ClusterFile<ClusterType, Enable>::read_clusters_without_cut(size_t n_clusters) {
         auto read_now = read_items_partial(
             (buf + nph_read), clusters.item_size(), nn, "clusters");
         if (read_now != nn) {
-            throw std::runtime_error(LOCATION + "Could not read clusters");
+            throw std::runtime_error(
+                LOCATION + "Unexpected end of file while reading clusters");
         }
         nph_read += read_now;
         m_num_left = nph - nn; // write back the number of photons left
@@ -365,7 +367,8 @@ ClusterFile<ClusterType, Enable>::read_clusters_without_cut(size_t n_clusters) {
             auto read_now = read_items_partial(
                 (buf + nph_read), clusters.item_size(), nn, "clusters");
             if (read_now != nn) {
-                throw std::runtime_error(LOCATION + "Could not read clusters");
+                throw std::runtime_error(
+                    LOCATION + "Unexpected end of file while reading clusters");
             }
             nph_read += read_now;
             m_num_left = nph - nn;
